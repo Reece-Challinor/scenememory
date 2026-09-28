@@ -20,13 +20,13 @@ class SceneMemoryApp {
   private startTime: number = Date.now();
 
   private config: SystemConfig = {
-    minConfidence: 0.45,
+    minConfidence: 0.40,
     ghostTimeoutMs: 10000,
     confirmationWindowFrames: 5,
     confirmationRequiredCount: 3,
     iouMatchThreshold: 0.35,
     enableNaiveBaseline: false,
-    activeMode: 'RECORDED_REPLAY', // Defaults to synthetic replay so user can test immediately!
+    activeMode: 'LIVE_WEBCAM', // Defaults to LIVE WEBCAM mode so camera starts immediately!
     enrolledCategories: []
   };
 
@@ -43,10 +43,13 @@ class SceneMemoryApp {
 
     // Start Detector initialization in background
     this.detector.initialize(this.config.minConfidence).then((ready) => {
-      this.updateStatusPill(ready ? 'Model Ready (MediaPipe)' : 'Synthetic Mode');
+      this.updateStatusPill(ready ? 'MediaPipe Model Ready' : 'Initializing Model...');
     });
 
-    // Start render loop
+    // Automatically trigger webcam start on page load
+    await this.startWebcamMode();
+
+    // Start main render loop
     this.startLoop();
   }
 
@@ -60,14 +63,14 @@ class SceneMemoryApp {
           <span class="brand-badge">SPATIAL PROOF LAB</span>
           <div>
             <h1 class="brand-title">SceneMemory v1.0</h1>
-            <p class="brand-subtitle">Uncertainty-Aware Desk Camera Perception & Spatial Memory</p>
+            <p class="brand-subtitle">Real-time Desk Camera Uncertainty Perception & Spatial Memory Overlay</p>
           </div>
         </div>
         <div class="header-status">
           <button id="btn-architectural-plan" class="btn">📋 16-Workstream Architecture & GCP Guide</button>
           <div class="status-pill">
             <span class="status-dot"></span>
-            <span id="status-text">Initializing...</span>
+            <span id="status-text">Requesting Camera Access...</span>
           </div>
         </div>
       </header>
@@ -77,17 +80,17 @@ class SceneMemoryApp {
         <section class="viewport-card">
           <div class="viewport-toolbar">
             <div class="toolbar-group">
-              <button id="btn-mode-toggle" class="btn btn-primary">📹 Mode: Synthetic Trace Replay</button>
+              <button id="btn-mode-toggle" class="btn btn-primary">📷 Live Webcam Active (Click to Switch)</button>
               <button id="btn-reset-camera" class="btn btn-danger">🔄 Camera Reset (Clear Anchors)</button>
             </div>
             <div class="toolbar-group">
-              <span style="font-size:0.8rem; color:var(--text-muted);">M3 Mac Client Inference</span>
+              <span style="font-size:0.8rem; color:var(--text-muted);">M3 Mac Client Hardware Accelerated</span>
             </div>
           </div>
 
-          <div class="video-stage">
-            <video id="webcam-video" autoplay playsinline muted style="display:none;"></video>
-            <canvas id="overlay-canvas" width="640" height="480"></canvas>
+          <div class="video-stage" style="position:relative; width:100%; aspect-ratio:4/3; background:#000; overflow:hidden;">
+            <video id="webcam-video" autoplay playsinline muted style="width:100%; height:100%; object-fit:contain; display:block;"></video>
+            <canvas id="overlay-canvas" width="640" height="480" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></canvas>
           </div>
         </section>
 
@@ -130,9 +133,9 @@ class SceneMemoryApp {
             <div class="control-group" style="margin-top:0.75rem;">
               <div class="control-label">
                 <span>Confidence Threshold</span>
-                <span id="val-confidence">0.45</span>
+                <span id="val-confidence">0.40</span>
               </div>
-              <input id="slider-confidence" type="range" class="range-slider" min="0.2" max="0.9" step="0.05" value="0.45" />
+              <input id="slider-confidence" type="range" class="range-slider" min="0.2" max="0.9" step="0.05" value="0.40" />
             </div>
 
             <div class="control-group" style="margin-top:0.75rem;">
@@ -253,17 +256,21 @@ class SceneMemoryApp {
 
   private async startWebcamMode() {
     try {
+      console.log('Requesting Mac webcam stream via getUserMedia...');
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'user' }
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+        audio: false
       });
       this.videoElement.srcObject = stream;
       this.videoElement.style.display = 'block';
       this.config.activeMode = 'LIVE_WEBCAM';
       this.memoryEngine.updateConfig({ activeMode: 'LIVE_WEBCAM' });
-      (document.querySelector('#btn-mode-toggle') as HTMLButtonElement).innerText = '📹 Mode: Live Webcam';
-      this.updateStatusPill('Live Camera Active');
+      (document.querySelector('#btn-mode-toggle') as HTMLButtonElement).innerText = '📷 Mode: Live Webcam (Active)';
+      this.updateStatusPill('Live Camera Active (M3 Mac)');
     } catch (err: any) {
-      alert('Unable to access webcam. Defaulting to Synthetic Trace Replay mode.');
+      console.warn('Unable to access webcam or permission pending:', err);
+      this.updateStatusPill('Camera Access Required (Click Mode Button)');
+      (document.querySelector('#btn-mode-toggle') as HTMLButtonElement).innerText = '📹 Fallback: Synthetic Replay (Click for Webcam)';
       this.startReplayMode();
     }
   }
@@ -278,7 +285,7 @@ class SceneMemoryApp {
     this.config.activeMode = 'RECORDED_REPLAY';
     this.memoryEngine.updateConfig({ activeMode: 'RECORDED_REPLAY' });
     (document.querySelector('#btn-mode-toggle') as HTMLButtonElement).innerText = '📹 Mode: Synthetic Trace Replay';
-    this.updateStatusPill('Synthetic Replay Active');
+    this.updateStatusPill('Synthetic Replay Mode');
   }
 
   private startLoop() {
@@ -308,9 +315,11 @@ class SceneMemoryApp {
     let rawDetections: any[] = [];
 
     if (this.config.activeMode === 'LIVE_WEBCAM') {
-      rawDetections = this.detector.detectVideoFrame(this.videoElement, now);
+      if (this.videoElement.readyState >= 2) {
+        rawDetections = this.detector.detectVideoFrame(this.videoElement, now);
+      }
     } else {
-      // Draw Synthetic Desk background
+      // Draw Synthetic Desk background for replay mode
       this.replayEngine.drawSyntheticBackground(this.ctx, elapsedSec, 640, 480);
       rawDetections = this.replayEngine.getSyntheticFrameDetections(elapsedSec, now);
     }
@@ -321,15 +330,34 @@ class SceneMemoryApp {
     // Process through Spatial Memory Engine state machine
     const { tracks, metrics } = this.memoryEngine.processFrame(rawDetections, now, latencyMs);
 
-    // Render Canvas AR overlay
+    // Compute scale factors between intrinsic video dimensions and canvas element
+    let scaleX = 1;
+    let scaleY = 1;
+
+    if (this.config.activeMode === 'LIVE_WEBCAM' && this.videoElement.videoWidth > 0) {
+      // Sync canvas dimensions with video intrinsic resolution
+      if (this.canvasElement.width !== this.videoElement.videoWidth) {
+        this.canvasElement.width = this.videoElement.videoWidth;
+        this.canvasElement.height = this.videoElement.videoHeight;
+      }
+      scaleX = 1;
+      scaleY = 1;
+    } else {
+      scaleX = 640 / 640;
+      scaleY = 480 / 480;
+    }
+
+    // Render Canvas AR overlay directly over video feed
     this.overlayRenderer.renderOverlay(
       this.ctx,
       tracks,
       metrics,
       this.config,
       now,
-      640,
-      480
+      this.canvasElement.width,
+      this.canvasElement.height,
+      scaleX,
+      scaleY
     );
 
     // Update Telemetry HUD
