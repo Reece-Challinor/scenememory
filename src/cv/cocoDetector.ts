@@ -22,7 +22,7 @@ export class CocoDetector {
    * Initializes TensorFlow.js WebGL backend and loads COCO-SSD lite_mobilenet_v2 model.
    * @param minConfidence Score threshold for qualifying detections.
    */
-  async initialize(minConfidence: number = 0.45): Promise<boolean> {
+  async initialize(): Promise<boolean> {
     if (this.isReady) return true;
     if (this.isInitializing) return false;
     this.isInitializing = true;
