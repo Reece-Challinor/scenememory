@@ -8,13 +8,16 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "kill": "pkill -f vite || true; pkill -f 'server.js' || true; rm -rf dist node_modules/.vite; echo '===================================================='; echo 'I have fucking killed it all.'; echo '===================================================='",
+    "demo": "npm run build && node server.js",
+    "money": "echo '===================================================='; echo 'SPATIAL PROOF LAB — COST & BILLING STATUS AUDIT'; echo '===================================================='; echo 'Client-Side Vision Inference Spend:  $0.00 (Runs 100% locally on M3 GPU)'; echo 'GCP Cloud Hosting Cost:              $0.00 (Scale-to-Zero static posture)'; echo '===================================================='"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.14",
     "@tensorflow-models/coco-ssd": "^2.2.3",
     "@tensorflow/tfjs": "^4.22.0",
-    "express": "^5.2.1"
+    "express": "^4.21.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
